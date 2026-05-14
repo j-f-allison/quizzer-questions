@@ -62,6 +62,31 @@ export default {
       return env.ASSETS.fetch(request);
     }
 
+    if (url.pathname === "/api/flag" && request.method === "POST") {
+      if (!env.DB) return json({ error: "flags database not configured" }, 500);
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return json({ error: "invalid JSON" }, 400);
+      }
+      const { question, setName, note, id, questionIndex, timestamp } = body;
+      if (!question) return json({ error: "question required" }, 400);
+      await env.DB.prepare(
+        "INSERT INTO flags (submitted_at, question_id, question_text, set_name, cursor_index, note) VALUES (?, ?, ?, ?, ?, ?)"
+      )
+        .bind(
+          timestamp ?? new Date().toISOString(),
+          id ?? null,
+          String(question),
+          setName ?? null,
+          questionIndex ?? null,
+          note ?? null
+        )
+        .run();
+      return json({ ok: true });
+    }
+
     return json({ error: "not found" }, 404);
   },
 };
