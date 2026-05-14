@@ -1,6 +1,6 @@
 # quizzer-questions
 
-Private backend for the [quizzer](https://github.com/j-f-allison/quizzer) app. Serves filtered question sets to the public frontend via an authenticated API.
+Private backend for the [quizzer](https://github.com/j-f-allison/quizzer-app) app. Serves filtered question sets to the public frontend via an authenticated API.
 
 This repo holds the actual question content. It pairs with the public app via a shared bearer token.
 
