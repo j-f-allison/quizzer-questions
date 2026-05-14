@@ -1,0 +1,11 @@
+src/manifest.js
+.dev.vars
+.DS_Store
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.vscode/
+.idea/
+node_modules/
+.wrangler/

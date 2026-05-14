@@ -1,0 +1,7 @@
+src/
+build-manifest.py
+README.md
+wrangler.jsonc
+.gitignore
+.assetsignore
+.dev.vars

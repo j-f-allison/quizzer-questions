@@ -1,0 +1,10 @@
+{
+  "name": "quizzer-questions",
+  "compatibility_date": "2026-05-14",
+  "main": "src/worker.js",
+  "assets": {
+    "directory": "./",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*", "/questions/*"]
+  }
+}
