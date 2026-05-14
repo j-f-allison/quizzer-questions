@@ -1,6 +1,6 @@
 # quizzer-questions
 
-Backend scaffold for the [quizzer](https://github.com/j-f-allison/quizzer) app. Holds the Worker code, build script, and Cloudflare config for serving question content via an authenticated API.
+Backend scaffold for the [quizzer](https://github.com/j-f-allison/quizzer-app) app. Holds the Worker code, build script, and Cloudflare config for serving question content via an authenticated API.
 
 This repo is intentionally **content-free**. To deploy a working backend, fork it to a private repo, add your own questions, and connect that private fork to Cloudflare.
 
