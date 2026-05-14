@@ -95,12 +95,28 @@ For multi-code files or display name overrides, use the wrapper format:
 
 ## JSON format
 
-Each question file is either a bare array of question objects, or an object wrapping one:
+Each question file is either a bare array of question objects, or a wrapper object.
+
+### Question fields
+
+| Field | Required | Description |
+|---|---|---|
+| `question` | yes | The question text. |
+| `option_a` – `option_d` | yes | Answer choices. |
+| `answer` | yes | Correct answer: `"A"`, `"B"`, `"C"`, or `"D"`. |
+| `id` | recommended | 8-character random alphanumeric string. Generate with `openssl rand -hex 4`. New questions should always include this. |
+| `answer_explanation` | no | Explanation shown after answering. |
+| `facts` | no | Inline fact pattern shown above the question. Paragraphs separated by `\n\n`. |
+| `facts_id` | no | ID of a shared fact pattern defined at the file's top level (see below). Requires wrapper format. |
+| `group_id` | no | Human-readable slug shared by questions that must stay together in order when shuffling (e.g., `"offer-hypo-1"`). |
+| `group_order` | no | 1-based position within the group. Required when `group_id` is set. |
+
+Minimal example (bare array):
 
 ```json
 [
   {
-    "facts": "Optional. Multi-paragraph fact pattern shown above the question.\n\nParagraphs separated by \\n\\n.",
+    "id": "a3f9b2c1",
     "question": "Under UCC § 2-207, ...",
     "option_a": "...",
     "option_b": "...",
@@ -112,12 +128,71 @@ Each question file is either a bare array of question objects, or an object wrap
 ]
 ```
 
-The runtime parser is forgiving:
-- Top-level can be `[...]`, `{"questions": [...]}`, `{"data": [...]}`, or `{"items": [...]}`
-- Alternate keys: `option_a` / `optionA` / `a`, `question` / `q` / `prompt`, `answer_explanation` / `explanation` / `rationale`, `facts` / `fact` / `scenario`
-- The `answer` field accepts `"A"`, `"a"`, `"A."`, `"option_a"`, etc.
+### Shared fact patterns
 
-For multi-code files or display name overrides, use the wrapper format with `_codes`, `_code`, `_name`. Codes are normally derived from the questions backend's subdirectory structure (see the backend's README).
+When multiple questions share the same fact pattern, define it once at the top level and reference it by ID. This avoids repetition and makes revisions easier. Requires the wrapper format:
+
+```json
+{
+  "facts": {
+    "offer-and-acceptance": "On Monday, Seller sent Buyer a signed written offer...\n\nOn Tuesday, Buyer replied in writing..."
+  },
+  "questions": [
+    {
+      "id": "a3f9b2c1",
+      "facts_id": "offer-and-acceptance",
+      "group_id": "contract-formation-1",
+      "group_order": 1,
+      "question": "Was a contract formed?",
+      "option_a": "...", "option_b": "...", "option_c": "...", "option_d": "...",
+      "answer": "B",
+      "answer_explanation": "..."
+    },
+    {
+      "id": "b7c1d4e2",
+      "facts_id": "offer-and-acceptance",
+      "group_id": "contract-formation-1",
+      "group_order": 2,
+      "question": "What is the buyer's remedy?",
+      "option_a": "...", "option_b": "...", "option_c": "...", "option_d": "...",
+      "answer": "C",
+      "answer_explanation": "..."
+    }
+  ]
+}
+```
+
+`facts_id` and `group_id` may share the same slug when the fact pattern defines the group, but they are independent: `facts_id` controls what text is displayed, `group_id` controls shuffle behavior. A group does not require a shared fact pattern, and a shared fact pattern does not require grouping.
+
+For standalone questions with a unique fact pattern, use the inline `facts` field instead.
+
+### Grouped questions
+
+Questions sharing a `group_id` are treated as a single unit when shuffling — they stay together and appear in `group_order` sequence. Use this for multi-part questions or any questions that depend on a specific ordering relative to each other.
+
+### Parser aliases
+
+The runtime parser accepts alternate keys:
+- `option_a` / `optionA` / `a`, and so on for B–D
+- `question` / `q` / `prompt`
+- `answer_explanation` / `explanation` / `rationale`
+- `facts` / `fact` / `scenario`
+- Top-level container: `[...]`, `{"questions": [...]}`, `{"data": [...]}`, or `{"items": [...]}`
+- `answer` accepts `"A"`, `"a"`, `"A."`, `"option_a"`, etc.
+
+### Wrapper format options
+
+For multi-code files, display name overrides, or shared facts, use the wrapper format. Recognized top-level keys:
+
+| Key | Description |
+|---|---|
+| `_codes` | Array of codes this file appears under |
+| `_code` | Single code (alternate to `_codes`) |
+| `_name` | Display name override |
+| `facts` | Map of fact pattern ID → text (for `facts_id` references) |
+| `questions` | The question array |
+
+Codes are normally derived from the backend's subdirectory structure (see the backend's README).
 
 
 ## Local development
