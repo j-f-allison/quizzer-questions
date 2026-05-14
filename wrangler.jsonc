@@ -6,5 +6,14 @@
     "directory": "./",
     "binding": "ASSETS",
     "run_worker_first": ["/api/*", "/questions/*"]
-  }
+  },
+  // Run: npx wrangler d1 create quizzer-flags
+  // Paste the database_id it prints below.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "quizzer-flags",
+      "database_id": "REPLACE_WITH_YOUR_DATABASE_ID"
+    }
+  ]
 }

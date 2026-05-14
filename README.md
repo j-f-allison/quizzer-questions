@@ -10,6 +10,7 @@ The Worker (`src/worker.js`) authenticates every request against `env.SHARED_TOK
 
 - `GET /api/sets?code=X` returns matching `{file, name}` entries from the bundled manifest
 - `GET /questions/<path>` serves the JSON file from static assets
+- `POST /api/flag` records a user-submitted question flag to a D1 database (see [Flag reports](#flag-reports) below)
 
 The manifest (`src/manifest.js`) is generated at deploy time by `build-manifest.py` from the contents of `questions/`. It's bundled into the Worker, never served as a static asset — so the master list of sets and codes can't be fetched directly.
 
@@ -18,8 +19,10 @@ The manifest (`src/manifest.js`) is generated at deploy time by `build-manifest.
 ```
 .
 ├── src/
-│   ├── worker.js        # auth gate + manifest filter
+│   ├── worker.js        # auth gate + manifest filter + flag handler
 │   └── manifest.js      # auto-generated at deploy time
+├── migrations/
+│   └── 0001_create_flags.sql  # D1 schema for flag reports
 ├── build-manifest.py    # generates src/manifest.js from questions/
 ├── wrangler.jsonc       # Cloudflare deploy config
 ├── .assetsignore        # files NOT served as static assets
@@ -58,6 +61,51 @@ In Cloudflare:
 3. Settings → Variables and Secrets → add `SHARED_TOKEN` (type: Secret) = the token from above
 
 Then deploy a paired [quizzer](https://github.com/j-f-allison/quizzer) app (forked similarly to private), with `QUESTIONS_URL` set to your backend's URL and `QUESTIONS_TOKEN` set to the same token.
+
+## Flag reports
+
+Users can flag questions from the quiz UI. Flags are stored in a Cloudflare D1 (SQLite) database. Each row records the question ID, question text, set name, cursor index, an optional note, and a timestamp.
+
+### Setting up D1 (Cloudflare dashboard — no CLI needed)
+
+1. **Create the database:** Cloudflare dashboard → **Workers & Pages** → **D1** → **Create database**. Name it `quizzer-flags`. Note the **Database ID** shown on the detail page.
+
+2. **Apply the schema:** Still on the D1 detail page, open the **Console** tab. Paste and run the contents of `migrations/0001_create_flags.sql`.
+
+3. **Add the binding to `wrangler.jsonc`** in your private fork:
+   ```jsonc
+   "d1_databases": [
+     {
+       "binding": "DB",
+       "database_name": "quizzer-flags",
+       "database_id": "<your-database-id>"
+     }
+   ]
+   ```
+
+4. **Deploy.** The `POST /api/flag` endpoint is now live.
+
+### Reviewing flags
+
+In the D1 Console (dashboard → D1 → quizzer-flags → Console):
+
+```sql
+SELECT * FROM flags ORDER BY submitted_at DESC LIMIT 50;
+```
+
+Or filter by set:
+
+```sql
+SELECT submitted_at, question_id, note FROM flags WHERE set_name = 'contracts' ORDER BY submitted_at DESC;
+```
+
+### Local development with D1
+
+Add a local D1 binding in `.dev.vars` is not supported for D1 — Wrangler creates a local SQLite file automatically when you run `wrangler dev` with a D1 binding in `wrangler.jsonc`. The local database starts empty; apply the migration once with:
+
+```bash
+npx wrangler d1 execute quizzer-flags --local --file=migrations/0001_create_flags.sql
+```
 
 ## Pulling future updates
 
