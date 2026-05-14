@@ -26,14 +26,9 @@ Conventions
 
 Output
 ------
-Writes src/manifest.js as an ES module exporting the manifest array:
-
-    export const manifest = [
-      { "file": "contracts/graves-mc.json",
-        "name": "Graves Mc",
-        "code": "contracts" },
-      ...
-    ];
+Writes src/manifest.js as an ES module exporting the manifest array. If
+no questions/ directory exists, writes an empty manifest (useful for
+testing the public scaffold without adding content).
 
 Usage
 -----
@@ -79,10 +74,15 @@ def read_overrides(json_path: Path):
     return codes, name
 
 
-def main() -> int:
+def collect_sets():
+    """Walk questions/ and return a list of manifest entries.
+    Returns ([], 0) if questions/ doesn't exist."""
     if not QUESTIONS_DIR.is_dir():
-        print(f"error: {QUESTIONS_DIR} does not exist", file=sys.stderr)
-        return 1
+        print(
+            f"warning: {QUESTIONS_DIR} does not exist — writing empty manifest",
+            file=sys.stderr,
+        )
+        return [], 0
 
     sets = []
     skipped = 0
@@ -122,6 +122,12 @@ def main() -> int:
             else:
                 entry["codes"] = codes
         sets.append(entry)
+
+    return sets, skipped
+
+
+def main() -> int:
+    sets, skipped = collect_sets()
 
     # Ensure src/ exists before writing
     MANIFEST_PATH.parent.mkdir(parents=True, exist_ok=True)
