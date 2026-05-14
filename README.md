@@ -92,9 +92,33 @@ For multi-code files or display name overrides, use the wrapper format:
 }
 ```
 
+
 ## JSON format
 
-See the [app README](https://github.com/j-f-allison/quizzer#json-format) for the full schema.
+Each question file is either a bare array of question objects, or an object wrapping one:
+
+```json
+[
+  {
+    "facts": "Optional. Multi-paragraph fact pattern shown above the question.\n\nParagraphs separated by \\n\\n.",
+    "question": "Under UCC § 2-207, ...",
+    "option_a": "...",
+    "option_b": "...",
+    "option_c": "...",
+    "option_d": "...",
+    "answer": "B",
+    "answer_explanation": "Optional. Empty string if no feedback."
+  }
+]
+```
+
+The runtime parser is forgiving:
+- Top-level can be `[...]`, `{"questions": [...]}`, `{"data": [...]}`, or `{"items": [...]}`
+- Alternate keys: `option_a` / `optionA` / `a`, `question` / `q` / `prompt`, `answer_explanation` / `explanation` / `rationale`, `facts` / `fact` / `scenario`
+- The `answer` field accepts `"A"`, `"a"`, `"A."`, `"option_a"`, etc.
+
+For multi-code files or display name overrides, use the wrapper format with `_codes`, `_code`, `_name`. Codes are normally derived from the questions backend's subdirectory structure (see the backend's README).
+
 
 ## Local development
 
