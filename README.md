@@ -72,16 +72,7 @@ Users can flag questions from the quiz UI. Flags are stored in a Cloudflare D1 (
 
 2. **Apply the schema:** Still on the D1 detail page, open the **Console** tab. Paste and run the contents of `migrations/0001_create_flags.sql`.
 
-3. **Add the binding to `wrangler.jsonc`** in your private fork:
-   ```jsonc
-   "d1_databases": [
-     {
-       "binding": "DB",
-       "database_name": "quizzer-flags",
-       "database_id": "<your-database-id>"
-     }
-   ]
-   ```
+3. **Add the binding in the Cloudflare dashboard** for your worker: **Workers & Pages → your worker → Settings → Bindings → Add → D1 Database**. Set the variable name to `DB` and select `quizzer-flags`.
 
 4. **Deploy.** The `POST /api/flag` endpoint is now live.
 
