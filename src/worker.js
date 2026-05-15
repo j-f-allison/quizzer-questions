@@ -12,6 +12,7 @@
 // Worker, never exposed as a static asset.
 
 import { manifest } from "./manifest.js";
+import { EmailMessage } from "cloudflare:email";
 
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), {
@@ -33,6 +34,35 @@ function checkAuth(request, env) {
   const auth = request.headers.get("Authorization");
   if (auth !== `Bearer ${env.SHARED_TOKEN}`) return "unauthorized";
   return null;
+}
+
+// Optional email notification on flag. Requires: EMAIL send_email binding,
+// NOTIFY_FROM (sender address on a Cloudflare Email Routing domain),
+// and NOTIFY_TO (recipient). If any are absent, silently skips.
+async function sendFlagNotification(env, { question, setName, note, id, questionIndex }) {
+  if (!env.EMAIL || !env.NOTIFY_FROM || !env.NOTIFY_TO) return;
+  const subject = "Quizzer: question flagged";
+  const body = [
+    `Set: ${setName ?? "(unknown)"}`,
+    `Question #${questionIndex != null ? questionIndex + 1 : "?"}${id ? ` (ID: ${id})` : ""}`,
+    ``,
+    question,
+    ``,
+    note ? `Note: ${note}` : "(no note provided)",
+  ].join("\n");
+  const raw = [
+    `From: Quizzer <${env.NOTIFY_FROM}>`,
+    `To: ${env.NOTIFY_TO}`,
+    `Subject: ${subject}`,
+    `Content-Type: text/plain; charset=utf-8`,
+    ``,
+    body,
+  ].join("\r\n");
+  const encoded = new TextEncoder().encode(raw);
+  const stream = new ReadableStream({
+    start(c) { c.enqueue(encoded); c.close(); },
+  });
+  await env.EMAIL.send(new EmailMessage(env.NOTIFY_FROM, env.NOTIFY_TO, stream));
 }
 
 export default {
@@ -84,6 +114,7 @@ export default {
           note ?? null
         )
         .run();
+      await sendFlagNotification(env, { question, setName, note, id, questionIndex });
       return json({ ok: true });
     }
 
