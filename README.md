@@ -64,17 +64,41 @@ Then deploy a paired [quizzer](https://github.com/j-f-allison/quizzer) app (fork
 
 ## Flag reports
 
-Users can flag questions from the quiz UI. Flags are stored in a Cloudflare D1 (SQLite) database. Each row records the question ID, question text, set name, cursor index, an optional note, and a timestamp.
+Users can flag questions from the quiz UI. Flags are stored in a Cloudflare D1 (SQLite) database. Each row records the question ID, question text, set name, cursor index, an optional note, and a timestamp. An optional email notification can be sent on each flag.
 
-### Setting up D1 (Cloudflare dashboard — no CLI needed)
+### Setting up D1
 
 1. **Create the database:** Cloudflare dashboard → **Workers & Pages** → **D1** → **Create database**. Name it `quizzer-flags`. Note the **Database ID** shown on the detail page.
 
-2. **Apply the schema:** Still on the D1 detail page, open the **Console** tab. Paste and run the contents of `migrations/0001_create_flags.sql`.
+2. **Apply the schema:** On the D1 detail page, open the **Console** tab. Paste and run the contents of `migrations/0001_create_flags.sql`.
 
-3. **Add the binding in the Cloudflare dashboard** for your worker: **Workers & Pages → your worker → Settings → Bindings → Add → D1 Database**. Set the variable name to `DB` and select `quizzer-flags`.
+3. **Add the binding to `wrangler.jsonc`** in your private fork — dashboard-only bindings do not survive `wrangler deploy`:
+
+```jsonc
+"d1_databases": [
+  {
+    "binding": "DB",
+    "database_name": "quizzer-flags",
+    "database_id": "your-database-id-here"
+  }
+]
+```
 
 4. **Deploy.** The `POST /api/flag` endpoint is now live.
+
+### Setting up email notifications (optional)
+
+Flag submissions can send an email notification. Requires Cloudflare Email Routing.
+
+1. **Enable Email Routing** for your domain: Cloudflare dashboard → your domain → **Email → Email Routing → Enable**.
+
+2. **Add a verified destination address** (`NOTIFY_TO`): Email Routing → **Destination addresses → Add**. Verify the address via the confirmation email.
+
+3. **Set secrets** on your Worker (Settings → Variables and Secrets):
+   - `NOTIFY_FROM` — a `noreply@yourdomain.com` address on your Email Routing domain
+   - `NOTIFY_TO` — the verified destination address from step 2
+
+4. **Check the Email Service binding:** The `send_email` binding is declared in `wrangler.jsonc` as `EMAIL`. After deploying, confirm it appears under your Worker's **Settings → Bindings** with the variable name `EMAIL`. If the dashboard shows a different name, delete it and re-add it with `EMAIL` as the variable name — the name must match exactly.
 
 ### Reviewing flags
 
@@ -90,9 +114,15 @@ Or filter by set:
 SELECT submitted_at, question_id, note FROM flags WHERE set_name = 'contracts' ORDER BY submitted_at DESC;
 ```
 
+To clear all flags:
+
+```sql
+DELETE FROM flags;
+```
+
 ### Local development with D1
 
-Add a local D1 binding in `.dev.vars` is not supported for D1 — Wrangler creates a local SQLite file automatically when you run `wrangler dev` with a D1 binding in `wrangler.jsonc`. The local database starts empty; apply the migration once with:
+Wrangler creates a local SQLite file automatically when you run `wrangler dev` with a D1 binding in `wrangler.jsonc`. The local database starts empty; apply the migration once with:
 
 ```bash
 npx wrangler d1 execute quizzer-flags --local --file=migrations/0001_create_flags.sql
