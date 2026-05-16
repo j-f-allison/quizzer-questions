@@ -40,7 +40,10 @@ function checkAuth(request, env) {
 // NOTIFY_FROM (sender address on a Cloudflare Email Routing domain),
 // and NOTIFY_TO (recipient). If any are absent, silently skips.
 async function sendFlagNotification(env, { question, setName, note, id, questionIndex }) {
-  if (!env.EMAIL || !env.NOTIFY_FROM || !env.NOTIFY_TO) return;
+  if (!env.EMAIL || !env.NOTIFY_FROM || !env.NOTIFY_TO) {
+    console.warn("Flag email skipped: missing", !env.EMAIL ? "EMAIL binding" : !env.NOTIFY_FROM ? "NOTIFY_FROM" : "NOTIFY_TO");
+    return;
+  }
   const subject = "Quizzer: question flagged";
   const body = [
     `Set: ${setName ?? "(unknown)"}`,
@@ -62,7 +65,12 @@ async function sendFlagNotification(env, { question, setName, note, id, question
   const stream = new ReadableStream({
     start(c) { c.enqueue(encoded); c.close(); },
   });
-  await env.EMAIL.send(new EmailMessage(env.NOTIFY_FROM, env.NOTIFY_TO, stream));
+  try {
+    await env.EMAIL.send(new EmailMessage(env.NOTIFY_FROM, env.NOTIFY_TO, stream));
+    console.log(`Flag email sent to ${env.NOTIFY_TO}`);
+  } catch (err) {
+    console.error("Flag email failed:", err?.message ?? err);
+  }
 }
 
 export default {
