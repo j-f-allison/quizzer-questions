@@ -17,11 +17,15 @@ Conventions
 - Only the FIRST-level subdirectory becomes the code. Deeper nesting
   is treated as file organization within a category:
       questions/contracts/week1/foo.json  ->  code "contracts"
-- Optional overrides (only for JSON wrapper-format files):
+- Optional in-file metadata (only for JSON wrapper-format files):
   If a JSON file is an object (not a bare array), it may include any of:
-      "_code"  : "tag"             single code, overrides directory
-      "_codes" : ["tag1", "tag2"]  multiple codes, overrides directory
+      "_code"  : "tag"             extra code, added to the directory code
+      "_codes" : ["tag1", "tag2"]  extra codes, added to the directory code
       "_name"  : "Display Name"    overrides the auto-derived name
+  _code / _codes are ADDITIVE: the directory-derived code is preserved,
+  and the extra codes are appended. So a file at
+      questions/property/wk01_01.json  with  "_code": "funky"
+  will be returned for both "property" and "funky" lookups.
   These keys are harmless to the runtime parser, which ignores them.
 
 Output
@@ -50,18 +54,19 @@ def pretty_name(filename: str) -> str:
 
 
 def read_overrides(json_path: Path):
-    """Return (codes_override, name_override) from a JSON file's wrapper
-    metadata, or (None, None) if not applicable."""
+    """Return (extra_codes, name_override) from a JSON file's wrapper
+    metadata. extra_codes is a list (possibly empty) of codes to add on
+    top of the directory-derived code; name_override is a string or None."""
     try:
         with open(json_path, "r", encoding="utf-8") as f:
             data = json.load(f)
     except Exception:
-        return None, None
+        return [], None
 
     if not isinstance(data, dict):
-        return None, None
+        return [], None
 
-    codes = None
+    codes = []
     if isinstance(data.get("_codes"), list):
         codes = [str(c).strip() for c in data["_codes"] if str(c).strip()]
     elif isinstance(data.get("_code"), str) and data["_code"].strip():
@@ -72,6 +77,19 @@ def read_overrides(json_path: Path):
         name = data["_name"].strip()
 
     return codes, name
+
+
+def merge_codes(directory_codes, extra_codes):
+    """Combine directory + in-file codes, case-insensitive dedup, preserve order."""
+    seen = set()
+    merged = []
+    for c in list(directory_codes) + list(extra_codes):
+        key = c.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(c)
+    return merged
 
 
 def collect_sets():
@@ -110,9 +128,10 @@ def collect_sets():
         # First-level subdirectory becomes the derived code (if any)
         derived_codes = [parts[0]] if len(parts) > 1 else []
 
-        # In-file overrides (wrapper-format JSON only)
-        override_codes, override_name = read_overrides(path)
-        codes = override_codes if override_codes is not None else derived_codes
+        # In-file metadata (wrapper-format JSON only). _code/_codes are
+        # additive — they extend the directory-derived code, not replace it.
+        extra_codes, override_name = read_overrides(path)
+        codes = merge_codes(derived_codes, extra_codes)
         name = override_name or pretty_name(path.name)
 
         entry = {"file": rel_path, "name": name}

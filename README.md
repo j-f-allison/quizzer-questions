@@ -62,6 +62,49 @@ In Cloudflare:
 
 Then deploy a paired [quizzer](https://github.com/j-f-allison/quizzer) app (forked similarly to private), with `QUESTIONS_URL` set to your backend's URL and `QUESTIONS_TOKEN` set to the same token.
 
+## Question file format
+
+Each `.json` file under `questions/` is either:
+
+- a **bare array** of question objects, or
+- a **wrapper object** with an optional `questions` array plus optional metadata fields read at manifest-build time.
+
+### Folder = code
+
+The first-level subdirectory under `questions/` becomes the set's **code**:
+
+```
+questions/property/wk01_01.json     → code "property"
+questions/contracts/week3/foo.json  → code "contracts"  (deeper nesting is ignored)
+questions/loose.json                → no code (uploadable only)
+```
+
+### Optional metadata fields (wrapper-format only)
+
+If the top-level JSON is an object, the build script reads these keys:
+
+| Field     | Type              | Effect                                                                 |
+|-----------|-------------------|------------------------------------------------------------------------|
+| `_code`   | string            | Extra code added on top of the directory code.                         |
+| `_codes`  | array of strings  | Extra codes added on top of the directory code. Overrides `_code`.     |
+| `_name`   | string            | Overrides the auto-derived display name (otherwise from the filename). |
+
+**`_code` / `_codes` are additive.** A file at `questions/property/wk01_01.json` with `"_code": "funky"` is returned for lookups of both `property` **and** `funky`. Codes are matched case-insensitively; duplicates are de-duplicated.
+
+These metadata keys are ignored by the runtime question parser, so they're safe to leave in place.
+
+Example:
+
+```json
+{
+  "_code": "funky",
+  "_name": "Property Week 1 — Funky Edition",
+  "questions": [
+    { "id": "q1", "question": "…", "options": [...], "answer": "A" }
+  ]
+}
+```
+
 ## Flag reports
 
 Users can flag questions from the quiz UI. Flags are stored in a Cloudflare D1 (SQLite) database. Each row records the question ID, question text, set name, cursor index, an optional note, and a timestamp. An optional email notification can be sent on each flag.
