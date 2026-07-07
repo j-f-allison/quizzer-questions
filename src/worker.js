@@ -12,6 +12,7 @@
 // Worker, never exposed as a static asset.
 
 import { manifest } from "./manifest.js";
+import { adminPage } from "./admin-page.js";
 import { EmailMessage } from "cloudflare:email";
 
 const json = (data, status = 200) =>
@@ -73,11 +74,157 @@ async function sendFlagNotification(env, { question, setName, note, id, question
   }
 }
 
+// ---- Admin panel (Cloudflare Access–gated) -------------------------------
+//
+// The /admin* routes are NOT gated by the shared bearer token (the admin's
+// browser doesn't have it). They're protected by Cloudflare Access, which
+// must be configured to cover the path /admin* on this Worker's host. As
+// defense-in-depth we also cryptographically verify the Access JWT here, so a
+// direct hit to this Worker's URL that bypasses Access is still rejected.
+
+function b64urlToBytes(s) {
+  s = s.replace(/-/g, "+").replace(/_/g, "/");
+  const pad = s.length % 4;
+  if (pad) s += "=".repeat(4 - pad);
+  const bin = atob(s);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+function b64urlToJson(s) {
+  return JSON.parse(new TextDecoder().decode(b64urlToBytes(s)));
+}
+
+function readCookie(request, name) {
+  const header = request.headers.get("Cookie");
+  if (!header) return null;
+  for (const part of header.split(";")) {
+    const [k, ...v] = part.trim().split("=");
+    if (k === name) return v.join("=");
+  }
+  return null;
+}
+
+// Cache the Access signing keys (JWKS) in module memory, keyed by team domain.
+let jwksCache = { domain: null, keys: null };
+async function getAccessKeys(teamDomain) {
+  if (jwksCache.domain === teamDomain && jwksCache.keys) return jwksCache.keys;
+  const res = await fetch(`${teamDomain}/cdn-cgi/access/certs`);
+  if (!res.ok) throw new Error(`JWKS fetch failed: ${res.status}`);
+  const { keys } = await res.json();
+  jwksCache = { domain: teamDomain, keys };
+  return keys;
+}
+
+// Returns { email } on success, or { error } ("admin not configured" → 500,
+// "forbidden" → 403).
+async function verifyAccess(request, env) {
+  const teamDomain = (env.ACCESS_TEAM_DOMAIN || "").replace(/\/+$/, "");
+  const aud = env.ACCESS_AUD;
+  if (!teamDomain || !aud) return { error: "admin not configured" };
+
+  const token =
+    request.headers.get("Cf-Access-Jwt-Assertion") ||
+    readCookie(request, "CF_Authorization");
+  if (!token) return { error: "forbidden" };
+
+  const parts = token.split(".");
+  if (parts.length !== 3) return { error: "forbidden" };
+
+  let header, payload;
+  try {
+    header = b64urlToJson(parts[0]);
+    payload = b64urlToJson(parts[1]);
+  } catch {
+    return { error: "forbidden" };
+  }
+
+  // Claim checks.
+  const now = Math.floor(Date.now() / 1000);
+  const auds = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+  if (!auds.includes(aud)) return { error: "forbidden" };
+  if (payload.iss !== teamDomain) return { error: "forbidden" };
+  if (typeof payload.exp === "number" && payload.exp < now) return { error: "forbidden" };
+
+  // Signature check (RS256).
+  let keys;
+  try {
+    keys = await getAccessKeys(teamDomain);
+  } catch {
+    return { error: "admin not configured" };
+  }
+  const jwk = keys.find((k) => k.kid === header.kid);
+  if (!jwk) return { error: "forbidden" };
+
+  let ok = false;
+  try {
+    const key = await crypto.subtle.importKey(
+      "jwk",
+      jwk,
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+      false,
+      ["verify"]
+    );
+    ok = await crypto.subtle.verify(
+      "RSASSA-PKCS1-v1_5",
+      key,
+      b64urlToBytes(parts[2]),
+      new TextEncoder().encode(`${parts[0]}.${parts[1]}`)
+    );
+  } catch {
+    ok = false;
+  }
+  if (!ok) return { error: "forbidden" };
+
+  return { email: payload.email || "(unknown)" };
+}
+
+async function handleAdmin(request, env, url) {
+  const auth = await verifyAccess(request, env);
+  if (auth.error) {
+    return json({ error: auth.error }, auth.error === "admin not configured" ? 500 : 403);
+  }
+
+  if (url.pathname === "/admin" && request.method === "GET") {
+    return new Response(adminPage, {
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "cache-control": "no-store",
+      },
+    });
+  }
+
+  if (url.pathname === "/admin/api/flags" && request.method === "GET") {
+    if (!env.DB) return json({ error: "flags database not configured" }, 500);
+    const { results } = await env.DB.prepare(
+      "SELECT id, submitted_at, question_id, question_text, set_name, cursor_index, note FROM flags ORDER BY submitted_at DESC"
+    ).all();
+    return json({ flags: results ?? [], user: auth.email });
+  }
+
+  const del = url.pathname.match(/^\/admin\/api\/flags\/(\d+)$/);
+  if (del && request.method === "DELETE") {
+    if (!env.DB) return json({ error: "flags database not configured" }, 500);
+    const id = Number(del[1]);
+    const res = await env.DB.prepare("DELETE FROM flags WHERE id = ?").bind(id).run();
+    if (!(res.meta?.changes ?? 0)) return json({ error: "not found" }, 404);
+    return json({ ok: true, deleted: id });
+  }
+
+  return json({ error: "not found" }, 404);
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    // Auth-gate everything this Worker handles.
+    // Admin panel is Access-gated, not bearer-gated — handle it first.
+    if (url.pathname === "/admin" || url.pathname.startsWith("/admin/")) {
+      return handleAdmin(request, env, url);
+    }
+
+    // Auth-gate everything else this Worker handles.
     const authError = checkAuth(request, env);
     if (authError) {
       const status = authError === "unauthorized" ? 401 : 500;

@@ -143,7 +143,43 @@ Flag submissions can send an email notification. Requires Cloudflare Email Routi
 
 4. **Check the Email Service binding:** The `send_email` binding is declared in `wrangler.jsonc` as `EMAIL`. After deploying, confirm it appears under your Worker's **Settings → Bindings** with the variable name `EMAIL`. If the dashboard shows a different name, delete it and re-add it with `EMAIL` as the variable name — the name must match exactly.
 
-### Reviewing flags
+### Reviewing flags — admin panel
+
+This Worker serves an admin panel at **`/admin`** that lists every flag with its full
+detail and lets you clear (permanently delete) flags one at a time. It is **not** behind
+the shared bearer token — it's protected by **Cloudflare Access** (email SSO). As
+defense-in-depth, the Worker also cryptographically verifies the Access JWT, so a direct
+request that bypasses Access is still rejected with `403`.
+
+**Setup (do this in the private fork, where `DB` lives):**
+
+1. **Create a Cloudflare Access application.** Zero Trust dashboard → **Access →
+   Applications → Add an application → Self-hosted**. Set the application path to cover
+   **only `/admin`** on this Worker's host (e.g. `questions.example.com/admin`). Leave the
+   rest of the host unprotected — `/api/*` and `/questions/*` are reached by the frontend
+   proxy, which has no Access cookie and would otherwise be blocked.
+
+   > Access self-hosted apps need a hostname proxied through Cloudflare. If this Worker is
+   > only on `*.workers.dev`, add a custom domain/route for it first.
+
+2. **Add an access policy** (e.g. allow your email, or your team's domain).
+
+3. **Copy the application's _Application Audience (AUD) tag_** (Access app → Overview).
+
+4. **Set two Worker variables** (Settings → Variables and Secrets, or `wrangler.jsonc`
+   `vars` in your fork):
+   - `ACCESS_TEAM_DOMAIN` — your team domain, e.g. `https://yourteam.cloudflareaccess.com`
+   - `ACCESS_AUD` — the AUD tag from step 3
+
+   If either is missing the panel returns `500 {"error":"admin not configured"}`.
+
+5. **Deploy.** This change also adds `/admin` + `/admin/*` to `run_worker_first` in
+   `wrangler.jsonc` — make sure that edit is present in the fork after pulling upstream.
+
+Then visit `https://<this-worker-host>/admin`, sign in through Access, and review/clear
+flags. Clearing a flag issues `DELETE /admin/api/flags/<id>` and removes the row for good.
+
+### Reviewing flags — raw SQL (fallback)
 
 In the D1 Console (dashboard → D1 → quizzer-flags → Console):
 
@@ -220,6 +256,7 @@ Each question file is either a bare array of question objects, or a wrapper obje
 | `answer_explanation` | no | Explanation shown after answering. |
 | `facts` | no | Inline fact pattern shown above the question. Paragraphs separated by `\n\n`. |
 | `facts_id` | no | ID of a shared fact pattern defined at the file's top level (see below). Requires wrapper format. |
+| `image` | no | Path (relative to the content repo's `questions/` dir, e.g. `property/images/laptop.png`) or absolute URL to an image shown above the question, above any facts. |
 | `group_id` | no | Human-readable slug shared by questions that must stay together in order when shuffling (e.g., `"offer-hypo-1"`). |
 | `group_order` | no | 1-based position within the group. Required when `group_id` is set. |
 
@@ -278,6 +315,10 @@ When multiple questions share the same fact pattern, define it once at the top l
 
 For standalone questions with a unique fact pattern, use the inline `facts` field instead.
 
+### Images
+
+Add an `image` field to show a diagram or figure above the question (above any facts). Store image files under `questions/<code>/images/` in the content repo, alongside the JSON files, and reference them by relative path (e.g. `"image": "property/images/laptop.png"`) or by absolute URL. Images stored under `questions/` are served the same auth-gated way as question JSON, via `/questions/<path>` — no separate upload mechanism or infrastructure is needed. There's no shared "images map" like `facts`/`facts_id`; questions that share a diagram just repeat the same path.
+
 ### Grouped questions
 
 Questions sharing a `group_id` are treated as a single unit when shuffling — they stay together and appear in `group_order` sequence. Use this for multi-part questions or any questions that depend on a specific ordering relative to each other.
@@ -289,6 +330,7 @@ The runtime parser accepts alternate keys:
 - `question` / `q` / `prompt`
 - `answer_explanation` / `explanation` / `rationale`
 - `facts` / `fact` / `scenario`
+- `image` / `image_url` / `img`
 - Top-level container: `[...]`, `{"questions": [...]}`, `{"data": [...]}`, or `{"items": [...]}`
 - `answer` accepts `"A"`, `"a"`, `"A."`, `"option_a"`, etc.
 
