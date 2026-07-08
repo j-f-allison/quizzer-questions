@@ -317,7 +317,7 @@ For standalone questions with a unique fact pattern, use the inline `facts` fiel
 
 ### Images
 
-Add an `image` field to show a diagram or figure above the question (above any facts). Store image files under `questions/<code>/images/` in the content repo, alongside the JSON files, and reference them by relative path (e.g. `"image": "property/images/laptop.png"`) or by absolute URL. Images stored under `questions/` are served the same auth-gated way as question JSON, via `/questions/<path>` — no separate upload mechanism or infrastructure is needed. There's no shared "images map" like `facts`/`facts_id`; questions that share a diagram just repeat the same path.
+Add an `image` field to show a diagram or figure above the question (above any facts). Store image files under `questions/<code>/images/` in the content repo, alongside the JSON files, and reference them by relative path (e.g. `"image": "property/images/laptop.png"`) or by absolute URL. Both `.png` and `.svg` files work — images stored under `questions/` are served the same auth-gated way as question JSON, via `/questions/<path>`, with no separate upload mechanism or infrastructure needed. There's no shared "images map" like `facts`/`facts_id`; questions that share a diagram just repeat the same path.
 
 ### Grouped questions
 
